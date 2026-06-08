@@ -1,0 +1,187 @@
+<script>
+  const state = {
+    data: window.BOOTSTRAP,
+    selectedDay: null,
+    scores: {}
+  };
+
+  const palette = ['#0f7b5f', '#3478a8', '#c6922e', '#8f5aa3', '#b84646', '#607b38'];
+
+  document.addEventListener('DOMContentLoaded', init);
+
+  function init() {
+    state.selectedDay = state.data.recentDays[0] || null;
+    state.scores = state.selectedDay ? { ...state.selectedDay.values } : {};
+
+    document.getElementById('sheetName').textContent = state.data.spreadsheetName + ' / ' + state.data.sheetName;
+    document.getElementById('currentDate').textContent = state.data.generatedAt;
+
+    bindTabs();
+    renderDaySelect();
+    renderHabits();
+    renderDashboard();
+    updateDailyTotal();
+
+    document.getElementById('daySelect').addEventListener('change', handleDayChange);
+    document.getElementById('saveButton').addEventListener('click', save);
+  }
+
+  function bindTabs() {
+    document.querySelectorAll('.tab').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach((tab) => tab.classList.remove('active'));
+        document.querySelectorAll('.view').forEach((view) => view.classList.remove('active'));
+        button.classList.add('active');
+        document.getElementById(button.dataset.tab === 'daily' ? 'dailyView' : 'statsView').classList.add('active');
+      });
+    });
+  }
+
+  function renderDaySelect() {
+    const select = document.getElementById('daySelect');
+    select.innerHTML = '';
+
+    state.data.recentDays.forEach((day) => {
+      const option = document.createElement('option');
+      option.value = day.dateKey;
+      option.textContent = day.displayDate;
+      select.appendChild(option);
+    });
+
+    if (state.selectedDay) select.value = state.selectedDay.dateKey;
+  }
+
+  function renderHabits() {
+    const list = document.getElementById('habitList');
+    list.innerHTML = '';
+
+    state.data.habits.forEach((habit) => {
+      const card = document.createElement('article');
+      card.className = 'habit-card';
+
+      const value = Number(state.scores[habit.key] || 0);
+      card.innerHTML = `
+        <div class="habit-head">
+          <div class="habit-title">
+            <strong>${escapeHtml(habit.name)}</strong>
+            <span>${escapeHtml(habit.description || 'درجة من 0 إلى 10')}</span>
+          </div>
+          <span class="score-badge" id="score-${habit.key}">${value} / 10</span>
+        </div>
+        <input type="range" min="0" max="10" step="1" value="${value}" data-habit="${habit.key}" aria-label="${escapeHtml(habit.name)}">
+      `;
+
+      list.appendChild(card);
+    });
+
+    list.querySelectorAll('input[type="range"]').forEach((slider) => {
+      slider.addEventListener('input', (event) => {
+        const key = event.target.dataset.habit;
+        state.scores[key] = Number(event.target.value);
+        document.getElementById(`score-${key}`).textContent = `${state.scores[key]} / 10`;
+        updateDailyTotal();
+      });
+    });
+  }
+
+  function renderDashboard() {
+    const stats = state.data.stats;
+    document.getElementById('overallPercentage').textContent = stats.overallPercentage + '%';
+
+    const averages = document.getElementById('habitAverages');
+    averages.innerHTML = '';
+    stats.averages.forEach((habit) => {
+      const color = palette[habit.colorIndex % palette.length];
+      averages.appendChild(metricRow(habit.name, `10 / ${habit.average}`, habit.percentage, color, `${habit.percentage}%`));
+    });
+
+    const incompleteDays = document.getElementById('recentIncompleteDays');
+    incompleteDays.innerHTML = '';
+    if (!stats.recentIncompleteDays || !stats.recentIncompleteDays.length) {
+      incompleteDays.innerHTML = '<p class="metric">كل عادات آخر 7 أيام مكتملة.</p>';
+    } else {
+      stats.recentIncompleteDays.forEach((day) => {
+        const missing = day.missingHabitNames.join('، ');
+        incompleteDays.appendChild(metricRow(day.displayDate, `${day.filledCount} / ${day.totalHabits}`, day.percentage, '#c6922e', missing));
+      });
+    }
+  }
+
+  function metricRow(title, value, percentage, color, subtext) {
+    const item = document.createElement('article');
+    item.className = 'metric';
+    item.innerHTML = `
+      <div class="metric-row">
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(value)}</span>
+      </div>
+      <div class="progress-track">
+        <span class="progress-fill" style="width:${percentage}%; background:${color}"></span>
+      </div>
+      <small>${escapeHtml(subtext || '')}</small>
+    `;
+    return item;
+  }
+
+  function handleDayChange(event) {
+    state.selectedDay = state.data.recentDays.find((day) => day.dateKey === event.target.value);
+    state.scores = state.selectedDay ? { ...state.selectedDay.values } : {};
+    renderHabits();
+    updateDailyTotal();
+  }
+
+  function updateDailyTotal() {
+    const possible = state.data.habits.length * 10;
+    const earned = state.data.habits.reduce((sum, habit) => sum + Number(state.scores[habit.key] || 0), 0);
+    const percentage = possible ? Math.round((earned / possible) * 100) : 0;
+
+    document.getElementById('dailyScore').textContent = `${earned} / ${possible}`;
+    document.getElementById('dailyProgress').style.width = percentage + '%';
+    document.getElementById('dailyPercent').textContent = `${percentage}% من الهدف اليومي`;
+  }
+
+  function save() {
+    if (!state.selectedDay) return;
+
+    setLoading(true);
+    google.script.run
+      .withSuccessHandler((freshData) => {
+        state.data = freshData;
+        state.selectedDay = state.data.recentDays.find((day) => day.dateKey === state.selectedDay.dateKey) || state.data.recentDays[0];
+        state.scores = state.selectedDay ? { ...state.selectedDay.values } : {};
+        renderDaySelect();
+        renderHabits();
+        renderDashboard();
+        updateDailyTotal();
+        setLoading(false);
+        showToast('تم الحفظ بنجاح.');
+      })
+      .withFailureHandler((error) => {
+        setLoading(false);
+        showToast(error && error.message ? error.message : 'تعذر الحفظ. حاول مرة أخرى.');
+      })
+      .saveDailyHabits(state.data.route, state.selectedDay.dateKey, state.scores);
+  }
+
+  function setLoading(isLoading) {
+    const button = document.getElementById('saveButton');
+    button.disabled = isLoading;
+    button.classList.toggle('loading', isLoading);
+  }
+
+  function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    window.setTimeout(() => toast.classList.remove('show'), 2600);
+  }
+
+  function escapeHtml(value) {
+    return String(value || '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+</script>

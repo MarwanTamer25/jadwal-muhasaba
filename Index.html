@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <?!= include('Styles'); ?>
+  </head>
+  <body>
+    <main class="app-shell" data-view="daily">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="sheetName">Google Sheets</p>
+          <h1>🕌 جدول محاسبة</h1>
+          <p class="today" id="currentDate">...</p>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="التنقل">
+        <button class="tab active" type="button" data-tab="daily">تسجيل اليوم</button>
+        <button class="tab" type="button" data-tab="stats">الإحصائيات</button>
+      </nav>
+
+      <section class="view active" id="dailyView">
+        <label class="field-label" for="daySelect">اختر اليوم الذي تريد تسجيله</label>
+        <select id="daySelect" class="day-select"></select>
+
+        <section class="total-panel">
+          <div class="total-row">
+            <span>إجمالي اليوم</span>
+            <strong id="dailyScore">0 / 0</strong>
+          </div>
+          <div class="progress-track">
+            <span class="progress-fill" id="dailyProgress"></span>
+          </div>
+          <p id="dailyPercent">0% من الهدف اليومي</p>
+        </section>
+
+        <section class="habit-list" id="habitList"></section>
+      </section>
+
+      <section class="view" id="statsView">
+        <section class="summary-grid">
+          <article class="summary-card large">
+            <span>متوسط الإنجاز</span>
+            <strong id="overallPercentage">0%</strong>
+          </article>
+        </section>
+
+        <section class="stats-section">
+          <h2>متوسط كل عبادة</h2>
+          <div id="habitAverages" class="stack"></div>
+        </section>
+
+        <section class="stats-section">
+          <h2>أيام تحتاج استكمال خلال آخر 7 أيام</h2>
+          <div id="recentIncompleteDays" class="stack"></div>
+        </section>
+      </section>
+
+      <button class="save-button" id="saveButton" type="button">
+        <span class="button-text">💾 حفظ في Google Sheets</span>
+        <span class="spinner" aria-hidden="true"></span>
+      </button>
+
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </main>
+
+    <script>
+      window.BOOTSTRAP = <?!= bootstrap ?>;
+    </script>
+    <?!= include('JavaScript'); ?>
+  </body>
+</html>
